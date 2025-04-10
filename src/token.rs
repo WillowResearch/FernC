@@ -5,8 +5,7 @@ pub enum TokenType {
     Ident,
 
     // Literals
-    NumLit,    
-    StringLit,
+    IntLit,    
 
     // Keywords
     Fn,

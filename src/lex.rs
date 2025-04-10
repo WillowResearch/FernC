@@ -9,18 +9,70 @@ pub fn lex_source(sm: &SourceMap, src_id: SourceId) -> Vec<Token> {
     let mut tokens = Vec::new();
 
     while let Some(next) = cursor.pop() {
-        if next.is_ascii_whitespace() {
-            cursor.ignore();
-        } else if next.is_ascii_digit() {
-            todo!();
-        } else if char_can_start_ident(next) {
-            while cursor.peek().is_some_and(char_can_continue_ident) {
-                cursor.pop();
+        let token_ty = match next {
+            // Whitespace
+            _ if next.is_ascii_whitespace() => {
+                cursor.ignore();
+                continue;
             }
 
-            let ty = ident_token_ty(cursor.pop_text());
-            tokens.push(cursor.pop_as_token(ty));
-        }
+            // Comments
+            '/' if cursor.peek_is('/') => {
+                while !cursor.peek_is('\n') {
+                    cursor.pop();
+                }
+                cursor.ignore();
+                continue;
+            }
+
+            // Literals
+            _ if next.is_ascii_digit() => {
+                while cursor.peek().is_some_and(|c| c.is_ascii_digit()) {
+                    cursor.pop();
+                }
+                TokenType::IntLit
+            }
+
+            // Identifiers and keywords
+            _ if char_can_start_ident(next) => {
+                while cursor.peek().is_some_and(char_can_continue_ident) {
+                    cursor.pop();
+                }
+
+                ident_token_ty(cursor.pop_text())
+            }
+
+            // Symbols
+            '(' => TokenType::LParen,
+            ')' => TokenType::RParen,
+            '{' => TokenType::LBracket,
+            '}' => TokenType::RBracket,
+            '[' => TokenType::LSquare,
+            ']' => TokenType::RSquare,
+            '+' => TokenType::Plus,
+            '-' if cursor.peek_is('>') => TokenType::RArrow,
+            '-' => TokenType::Minus,
+            '*' => TokenType::Mul,
+            '/' => TokenType::Div,
+            '!' if cursor.peek_is('=') => TokenType::NotEq,
+            '!' => TokenType::Not,
+            '|' if cursor.peek_is('|') => TokenType::OrOr,
+            '&' if cursor.peek_is('&') => TokenType::AndAnd,
+            '=' if cursor.peek_is('=') => TokenType::EqEq,
+            '=' => TokenType::Eq,
+            '<' if cursor.peek_is('=') => TokenType::Lte,
+            '<' => TokenType::Lt,
+            '>' if cursor.peek_is('=') => TokenType::Gte,
+            '>' => TokenType::Gt,
+            ';' => TokenType::Semicolon,
+            ':' => TokenType::Colon,
+
+            // Unrecognized character is an error.
+            _ => TokenType::Error,
+        };
+
+        let token = cursor.pop_as_token(token_ty);
+        tokens.push(token);
     }
 
     tokens.push(cursor.pop_as_token(TokenType::EOF));
@@ -71,8 +123,12 @@ impl<'a> Cursor<'a> {
         &self.text[self.byte_offset..]
     }
 
-    fn peek(&mut self) -> Option<char> {
+    fn peek(&self) -> Option<char> {
         self.remaining_text().chars().next()
+    }
+
+    fn peek_is(&self, c: char) -> bool {
+        self.peek() == Some(c)
     }
 
     fn pop(&mut self) -> Option<char> {
