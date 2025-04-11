@@ -1,11 +1,12 @@
+//! The lexer converts a `Source` into a series of `Token`s.
+
 use crate::{
-    source_map::{SourceId, SourceMap},
-    span::Span,
+    source_map::{Source, Span},
     token::{Token, TokenType},
 };
 
-pub fn lex_source(sm: &SourceMap, src_id: SourceId) -> Vec<Token> {
-    let mut cursor = Cursor::new(sm, src_id);
+pub fn lex_source(source: &Source) -> Vec<Token> {
+    let mut cursor = Cursor::new(source);
     let mut tokens = Vec::new();
 
     while let Some(next) = cursor.pop() {
@@ -50,22 +51,44 @@ pub fn lex_source(sm: &SourceMap, src_id: SourceId) -> Vec<Token> {
             '[' => TokenType::LSquare,
             ']' => TokenType::RSquare,
             '+' => TokenType::Plus,
-            '-' if cursor.peek_is('>') => TokenType::RArrow,
+            '-' if cursor.peek_is('>') => {
+                cursor.pop();
+                TokenType::RArrow
+            }
             '-' => TokenType::Minus,
             '*' => TokenType::Mul,
             '/' => TokenType::Div,
-            '!' if cursor.peek_is('=') => TokenType::NotEq,
+            '!' if cursor.peek_is('=') => {
+                cursor.pop();
+                TokenType::NotEq
+            }
             '!' => TokenType::Not,
-            '|' if cursor.peek_is('|') => TokenType::OrOr,
-            '&' if cursor.peek_is('&') => TokenType::AndAnd,
-            '=' if cursor.peek_is('=') => TokenType::EqEq,
+            '|' if cursor.peek_is('|') => {
+                cursor.pop();
+                TokenType::OrOr
+            }
+            '&' if cursor.peek_is('&') => {
+                cursor.pop();
+                TokenType::AndAnd
+            }
+            '=' if cursor.peek_is('=') => {
+                cursor.pop();
+                TokenType::EqEq
+            }
             '=' => TokenType::Eq,
-            '<' if cursor.peek_is('=') => TokenType::Lte,
+            '<' if cursor.peek_is('=') => {
+                cursor.pop();
+                TokenType::Lte
+            }
             '<' => TokenType::Lt,
-            '>' if cursor.peek_is('=') => TokenType::Gte,
+            '>' if cursor.peek_is('=') => {
+                cursor.pop();
+                TokenType::Gte
+            }
             '>' => TokenType::Gt,
             ';' => TokenType::Semicolon,
             ':' => TokenType::Colon,
+            ',' => TokenType::Comma,
 
             // Unrecognized character is an error.
             _ => TokenType::Error,
@@ -100,27 +123,28 @@ fn ident_token_ty(ident: &str) -> TokenType {
 }
 
 struct Cursor<'a> {
-    src_id: SourceId,
-    text: &'a str,
-
+    source: &'a Source,
     byte_offset: usize,
     span_offset: usize,
     span_len: usize,
 }
 
 impl<'a> Cursor<'a> {
-    fn new(sm: &'a SourceMap<'a>, src_id: SourceId) -> Self {
+    fn new(source: &'a Source) -> Self {
         Self {
-            src_id,
-            text: sm.get_source(src_id).text,
+            source: source,
             byte_offset: 0,
             span_offset: 0,
             span_len: 0,
         }
     }
 
+    fn text(&self) -> &str {
+        self.source.text()
+    }
+
     fn remaining_text(&self) -> &str {
-        &self.text[self.byte_offset..]
+        &self.text()[self.byte_offset..]
     }
 
     fn peek(&self) -> Option<char> {
@@ -141,17 +165,13 @@ impl<'a> Cursor<'a> {
     }
 
     fn pop_text(&self) -> &str {
-        &self.text[self.span_offset..self.span_offset + self.span_len]
+        &self.text()[self.span_offset..self.span_offset + self.span_len]
     }
 
     fn pop_as_span(&mut self) -> Span {
-        let span = Span {
-            src_id: self.src_id,
-            byte_offset: self.span_offset,
-            byte_len: self.span_len,
-        };
+        let span = self.source.span_with_len(self.span_offset, self.span_len);
 
-        self.span_offset = self.span_len;
+        self.span_offset = self.byte_offset;
         self.span_len = 0;
 
         span
@@ -162,7 +182,7 @@ impl<'a> Cursor<'a> {
     }
 
     fn ignore(&mut self) {
-        self.span_offset = self.span_len;
+        self.span_offset = self.byte_offset;
         self.span_len = 0;
     }
 }
