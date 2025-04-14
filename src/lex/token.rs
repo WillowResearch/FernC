@@ -1,7 +1,43 @@
 use crate::source_map::Span;
 
+pub enum TokenTree {
+    Leaf(Token),
+    Node(TokenTreeNode),
+}
+
+pub struct TokenTreeNode {
+    pub paren_ty: ParenType,
+    pub left: Span,
+    pub right: Span,
+    pub children: Vec<TokenTree>,
+}
+
+impl TokenTreeNode {
+    pub fn new(ty: ParenType, left: Span, right: Span, children: Vec<TokenTree>) -> Self {
+        Self { paren_ty: ty, left, right, children }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParenType {
+    Paren,
+    Bracket,
+    Square,
+}
+
+impl ParenType {
+    pub fn new_from_char(char: char) -> ParenType {
+        match char {
+            '(' | ')' => ParenType::Paren,
+            '{' | '}' => ParenType::Bracket,
+            '[' | ']' => ParenType::Square,
+            _ => unreachable!("Only call new_from_char on parenthesis.")
+        }
+    }
+}
+
 /// The lexical category of a `Token`.
-/// 
+///
 /// Note that we don't have categories for whitespace or comments. Those are
 /// discarded immediately.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -9,7 +45,7 @@ pub enum TokenType {
     Ident,
 
     // Literals
-    IntLit,    
+    IntLit,
 
     // Keywords
     Fn,
@@ -17,14 +53,6 @@ pub enum TokenType {
     If,
     While,
     For,
-
-    // Parenthesis
-    LParen,
-    RParen,
-    LBracket,
-    RBracket,
-    LSquare,
-    RSquare,
 
     // Symbols
     Semicolon,
@@ -51,7 +79,15 @@ pub enum TokenType {
 
     // Other
     EOF,
-    Error
+    Error(TokenErrorTy),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenErrorTy {
+    IllegalChar,
+    UnmatchedOpenParen,
+    UnmatchedCloseParen,
+    MismatchedParenTy(ParenType),
 }
 
 /// The smallest lexical unit.

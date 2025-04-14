@@ -8,35 +8,52 @@
 //! 1) The lexer, implemented in the module `lex`.
 //! 2) TODO
 
+use std::io::stdout;
+
 use diagnostics::Diagnostic;
-use lex::lex_source;
+use lex::{lex_source, token::TokenTree};
 use source_map::SourceMap;
-use token::TokenType;
 
 mod diagnostics;
 mod lex;
+mod parse;
 mod source_map;
-mod token;
+
+type FResult<T> = Result<T, Vec<Diagnostic>>;
 
 fn main() {
     let mut sm = SourceMap::new();
     sm.add_source_from_file("examples/simple.fern");
 
-    let mut errors = String::new();
+    match pipeline(&sm) {
+        Ok(_) => {},
+        Err(errs) => {
+            let mut out = String::new();
 
-    for source in sm.sources() {
-        for token in lex_source(source) {
-            if token.ty() != TokenType::Error {
-                continue;
+            for e in errs {
+                e.render(&mut out, &sm);
+                out.push('\n');
             }
 
-            let text = source.text_of_span(token.span());
-            _ = Diagnostic::new(format!("Unexpected symbol `{text}`."))
-                .add_part(token.span(), "Unexpected symbol".to_string())
-                .render(&mut errors, &sm);
-            errors.push_str("\n");
+            print!("{out}");
+        },
+    }
+}
+
+fn pipeline(sm: &SourceMap) -> FResult<()> {
+    let mut errors = Vec::new();
+
+    for source in sm.sources() {
+        match lex_source(&source) {
+            Ok(_) => {},
+            Err(e) => errors.extend(e),
         }
+        
     }
 
-    print!("{errors}");
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+
+    Ok(())
 }
