@@ -197,6 +197,10 @@ impl Span {
         Self { start, end }
     }
 
+    pub fn union(start: Self, end: Self) -> Self {
+        Self::new(start.start(), end.end())
+    }
+
     /// The id of the `Source` this `Span` is within.
     pub fn src_id(&self) -> SourceId {
         self.start.src_id()
@@ -216,6 +220,8 @@ impl Span {
     pub fn byte_range(&self) -> Range<usize> {
         self.start().byte()..self.end().byte()
     }
+    
+
 }
 
 /// A position of a single character within a `Source`.

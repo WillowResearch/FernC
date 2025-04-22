@@ -1,38 +1,40 @@
 use crate::source_map::Span;
 
-pub enum TokenTree {
-    Leaf(Token),
-    Node(TokenTreeNode),
+pub struct TokenTree {
+    ty: TokenType,
+    span: Span,
+    children: Vec<TokenTree>,
 }
 
-pub struct TokenTreeNode {
-    pub paren_ty: ParenType,
-    pub left: Span,
-    pub right: Span,
-    pub children: Vec<TokenTree>,
-}
-
-impl TokenTreeNode {
-    pub fn new(ty: ParenType, left: Span, right: Span, children: Vec<TokenTree>) -> Self {
-        Self { paren_ty: ty, left, right, children }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ParenType {
-    Paren,
-    Bracket,
-    Square,
-}
-
-impl ParenType {
-    pub fn new_from_char(char: char) -> ParenType {
-        match char {
-            '(' | ')' => ParenType::Paren,
-            '{' | '}' => ParenType::Bracket,
-            '[' | ']' => ParenType::Square,
-            _ => unreachable!("Only call new_from_char on parenthesis.")
+impl TokenTree {
+    pub fn new(ty: TokenType, span: Span) -> Self {
+        Self {
+            ty,
+            span,
+            children: Vec::new(),
         }
+    }
+
+    pub fn new_error(error_ty: TokenErrorTy, span: Span) -> Self {
+        Self::new(TokenType::Error(error_ty), span)
+    }
+
+    pub fn new_nested(ty: TokenType, span: Span, children: Vec<TokenTree>) -> Self {
+        assert!(ty.is_nested(), "Only nested tokens can have children");
+
+        Self { ty, span, children }
+    }
+
+    pub fn ty(&self) -> TokenType {
+        self.ty
+    }
+
+    pub fn span(&self) -> Span {
+        self.span
+    }
+
+    pub fn children(&self) -> &[TokenTree] {
+        &self.children
     }
 }
 
@@ -53,6 +55,11 @@ pub enum TokenType {
     If,
     While,
     For,
+
+    // Nested
+    Parens,
+    Brackets,
+    CurlyBrackets,
 
     // Symbols
     Semicolon,
@@ -77,9 +84,26 @@ pub enum TokenType {
     Gt,
     Gte,
 
-    // Other
-    EOF,
+    // Error
     Error(TokenErrorTy),
+}
+
+impl TokenType {
+    pub fn new_from_paren(char: char) -> Self {
+        match char {
+            '(' | ')' => Self::Parens,
+            '[' | ']' => Self::Brackets,
+            '{' | '}' => Self::CurlyBrackets,
+            _ => unreachable!("Only call new_from_char on parenthesis."),
+        }
+    }
+
+    pub fn is_nested(&self) -> bool {
+        matches!(
+            self,
+            TokenType::Parens | TokenType::Brackets | TokenType::CurlyBrackets
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,32 +111,5 @@ pub enum TokenErrorTy {
     IllegalChar,
     UnmatchedOpenParen,
     UnmatchedCloseParen,
-    MismatchedParenTy(ParenType),
-}
-
-/// The smallest lexical unit.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Token {
-    /// The type of the token.
-    ty: TokenType,
-
-    /// The span of text the token came from.
-    span: Span,
-}
-
-impl Token {
-    /// Create a new `Token` from it's category and type.
-    pub fn new(ty: TokenType, span: Span) -> Self {
-        Self { ty, span }
-    }
-
-    /// Get the `TokenType` of the `Token`.
-    pub fn ty(&self) -> TokenType {
-        self.ty
-    }
-
-    /// Returns the `Span` the `Token` covers.
-    pub fn span(&self) -> Span {
-        self.span
-    }
+    MismatchedParenTy { open_span: Span },
 }

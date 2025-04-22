@@ -12,6 +12,7 @@ use std::io::stdout;
 
 use diagnostics::Diagnostic;
 use lex::{lex_source, token::TokenTree};
+use parse::{parse_source, visit::pretty_print};
 use source_map::SourceMap;
 
 mod diagnostics;
@@ -44,8 +45,12 @@ fn pipeline(sm: &SourceMap) -> FResult<()> {
     let mut errors = Vec::new();
 
     for source in sm.sources() {
-        match lex_source(&source) {
-            Ok(_) => {},
+        match parse_source(&source) {
+            Ok(parsed) => {
+                let mut out = String::new();
+                pretty_print(&parsed, source, &mut out);
+                println!("{out}");
+            },
             Err(e) => errors.extend(e),
         }
         

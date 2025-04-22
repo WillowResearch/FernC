@@ -1,11 +1,11 @@
 //! The lexer converts a `Source` into a series of `Token`s.
 
 use crate::{
-    diagnostics::Diagnostic,
+    diagnostics::{specifics::lex::mismatched_close_paren, Diagnostic},
     source_map::{Source, Span},
     FResult,
 };
-use token::{ParenType, Token, TokenErrorTy, TokenTree, TokenTreeNode, TokenType};
+use token::{TokenErrorTy, TokenTree, TokenType};
 
 pub mod token;
 
@@ -33,18 +33,18 @@ impl<'a> Lexer<'a> {
     }
 
     fn get_tokens(&mut self) -> Vec<TokenTree> {
-        let mut paren_stack: Vec<(ParenType, Span, Vec<TokenTree>)> = Vec::new();
+        let mut paren_stack: Vec<(TokenType, Span, Vec<TokenTree>)> = Vec::new();
         let mut tokens = Vec::new();
 
         while let Some(next) = self.cursor.pop() {
             match next {
                 '(' | '{' | '[' => {
-                    let ty = ParenType::new_from_char(next);
+                    let ty = TokenType::new_from_paren(next);
                     paren_stack.push((ty, self.cursor.popped_as_span(), tokens));
                     tokens = Vec::new();
                 }
                 ')' | '}' | ']' => {
-                    let Some((left_ty, left_span, previous_tokens)) = paren_stack.pop() else {
+                    let Some((open_ty, open_span, previous_tokens)) = paren_stack.pop() else {
                         // There is no matching parenthesis for this one so
                         // just replace this token with an error.
                         let token_ty = TokenType::Error(TokenErrorTy::UnmatchedCloseParen);
@@ -52,25 +52,27 @@ impl<'a> Lexer<'a> {
                         continue;
                     };
 
-                    let right_ty = ParenType::new_from_char(next);
-                    let right_span = self.cursor.popped_as_span();
+                    let close_ty = TokenType::new_from_paren(next);
+                    let close_span = self.cursor.popped_as_span();
 
-                    if left_ty != right_ty {
+                    if open_ty != close_ty {
                         // If the types don't match we will still build the tree
                         // but we will also add an extra error token at the end
                         // of the children.
-                        let token_type =
-                            TokenType::Error(TokenErrorTy::MismatchedParenTy(right_ty));
-                        let err_token = Token::new(token_type, right_span);
-                        tokens.push(TokenTree::Leaf(err_token));
+                        let token = TokenTree::new_error(
+                            TokenErrorTy::MismatchedParenTy { open_span },
+                            close_span,
+                        );
+                        tokens.push(token);
                     }
 
-                    let tree = TokenTreeNode::new(left_ty, left_span, right_span, tokens);
+                    let whole_span = Span::union(open_span, close_span);
+                    let tree = TokenTree::new_nested(open_ty, whole_span, tokens);
 
                     // Restore the previous tokens and add the tree we
                     // just built at the end.
                     tokens = previous_tokens;
-                    tokens.push(TokenTree::Node(tree));
+                    tokens.push(tree);
                 }
                 _ => {
                     let Some(ty) = self.next_leaf_ty(next) else {
@@ -86,16 +88,14 @@ impl<'a> Lexer<'a> {
         // unmatched opening parenthesis. We will just ignore those opening
         // parenthesis by replacing them with an error token and concatenating
         // the whole stack into the current tokens vec.
-        for (_, left_span, mut prev_tokens) in paren_stack.into_iter().rev() {
-            let token_ty = TokenType::Error(TokenErrorTy::UnmatchedOpenParen);
-            let err_token = Token::new(token_ty, left_span);
+        for (_, open_span, mut prev_tokens) in paren_stack.into_iter().rev() {
+            let err_token = TokenTree::new_error(TokenErrorTy::UnmatchedOpenParen, open_span);
 
-            prev_tokens.push(TokenTree::Leaf(err_token));
+            prev_tokens.push(err_token);
             prev_tokens.extend(tokens);
             tokens = prev_tokens;
         }
 
-        tokens.push(self.cursor.popped_as_token(TokenType::EOF));
         tokens
     }
 
@@ -266,7 +266,7 @@ impl<'a> Cursor<'a> {
     }
 
     fn popped_as_token(&mut self, ty: TokenType) -> TokenTree {
-        TokenTree::Leaf(Token::new(ty, self.popped_as_span()))
+        TokenTree::new(ty, self.popped_as_span())
     }
 
     fn ignore(&mut self) {
@@ -277,23 +277,23 @@ impl<'a> Cursor<'a> {
 
 fn find_errors(tokens: &[TokenTree], source: &Source, errors: &mut Vec<Diagnostic>) {
     for token in tokens {
-        match token {
-            TokenTree::Leaf(token) => {
-                let TokenType::Error(ty) = token.ty() else {
-                    continue;
-                };
+        find_errors(token.children(), source, errors);
 
-                use crate::diagnostics::specifics::lex;
+        let TokenType::Error(ty) = token.ty() else {
+            continue;
+        };
 
-                let error = match ty {
-                    TokenErrorTy::IllegalChar => lex::illegal_char(token.span(), source),
-                    TokenErrorTy::UnmatchedOpenParen => todo!(),
-                    TokenErrorTy::UnmatchedCloseParen => todo!(),
-                    TokenErrorTy::MismatchedParenTy(paren_type) => todo!(),
-                };
-                errors.push(error);
+        use crate::diagnostics::specifics::lex;
+        use TokenErrorTy as TET;
+
+        let error = match ty {
+            TET::IllegalChar => lex::illegal_char(token.span(), source),
+            TET::UnmatchedOpenParen => lex::unmatched_open_paren(token.span(), source),
+            TET::UnmatchedCloseParen => lex::unmatched_close_paren(token.span(), source),
+            TET::MismatchedParenTy { open_span } => {
+                mismatched_close_paren(open_span, token.span(), source)
             }
-            TokenTree::Node(node) => find_errors(&node.children, &source, errors),
-        }
+        };
+        errors.push(error);
     }
 }
