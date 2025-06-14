@@ -187,13 +187,16 @@ fn parse_fn(cursor: &mut Cursor, diags: &mut Vec<Diagnostic>) -> PResult<FnDeclA
 fn parse_block(cursor: &mut Cursor, diags: &mut Vec<Diagnostic>) -> PResult<BlockAst> {
     // todo!()
     cursor.pop_expect(TokenType::CurlyBrackets);
-    Ok(BlockAst { statements: Vec::new(), return_expr: None })
+    Ok(BlockAst {
+        statements: Vec::new(),
+        return_expr: None,
+    })
 }
 
 fn parse_ty(cursor: &mut Cursor, diags: &mut Vec<Diagnostic>) -> PResult<TypeAst> {
     // todo!()
-    cursor.pop_expect(TokenType::Ident);
-    Ok(TypeAst {  })
+    let name = cursor.pop_expect(TokenType::Ident);
+    Ok(TypeAst { name_ident: name?.span() })
 }
 
 struct Cursor<'a> {

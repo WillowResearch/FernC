@@ -15,6 +15,7 @@ use lex::{lex_source, token::TokenTree};
 use parse::{parse_source, visit::pretty_print};
 use source_map::SourceMap;
 
+pub mod utils;
 mod diagnostics;
 mod lex;
 mod parse;

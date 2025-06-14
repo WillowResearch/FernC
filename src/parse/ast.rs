@@ -79,4 +79,6 @@ pub struct IfExprAst {
 }
 
 #[derive(Debug)]
-pub struct TypeAst {}
+pub struct TypeAst {
+    pub name_ident: Span
+}
